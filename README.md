@@ -182,26 +182,6 @@ nft list chain inet fw4 srcnat_wan | grep -i fullcone
 6. Via LuCI (se preferir):
 - Network → Firewall → FullCone NAT → habilitar.
 
-## Recuperar a web (LuCI) via SSH no firmware antigo
-
-**Com internet no roteador:**
-```sh
-apk update
-apk add luci luci-ssl
-service uhttpd enable && service uhttpd start
-```
-
-**Sem internet (pacote offline `luci-offline-25.12.5-aarch64_cortex-a72.tar.gz`):**
-```sh
-# no PC
-scp -O luci-offline-25.12.5-aarch64_cortex-a72.tar.gz root@192.168.1.1:/tmp/
-# no roteador
-cd /tmp && tar xzf luci-offline-25.12.5-aarch64_cortex-a72.tar.gz
-apk add --allow-untrusted /tmp/luci-offline/*.apk
-service rpcd restart
-service uhttpd enable && service uhttpd start
-```
-
 ## Atualizar direto pelo SSH (sem precisar da web)
 ```sh
 # no PC
