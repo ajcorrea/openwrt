@@ -1,74 +1,187 @@
-# Build OpenWrt 25.12.5 para Raspberry Pi 4 (bcm27xx/bcm2711, armv8) com FullCone NAT
+# Build OpenWrt com FullCone NAT, LuCI, tema Argon e expand_root (multi-target)
 
 **Autor:** Alexandre Jeronimo Correa  
 **GitHub:** [github.com/ajcorrea/openwrt](https://github.com/ajcorrea/openwrt)  
 **E-mail:** [ajcorrea@gmail.com](mailto:ajcorrea@gmail.com)
 
-## Resumo 
+## Resumo
 
-Este build foi feito com **ImageBuilder oficial do OpenWrt** para o target **bcm27xx/bcm2711** e perfil **rpi-4** (Raspberry Pi 4B/400/CM4 64 bits).
+O script [`build_openwrt.sh`](build_openwrt.sh) gera firmware OpenWrt para **qualquer target com partição de rootfs** (PC/VM x86, Raspberry Pi e similares). Ele usa o **ImageBuilder** e o **SDK oficiais** da release escolhida e inclui:
 
-- **Versão usada:** `25.12.5` (confirmada em `https://downloads.openwrt.org/releases/`)
-- **Target/Subtarget:** `bcm27xx/bcm2711`
-- **Perfil:** `rpi-4`
-- **Arquitetura:** `aarch64_cortex-a72` (ARMv8)
+- FullCone NAT (`kmod-nft-fullcone`, `firewall4` com patch, `luci-app-fullcone`);
+- LuCI completo (`uhttpd`, `rpcd-mod-luci`, `luci-ssl`);
+- tema Argon 3.0.0 como padrão, com tradução pt-BR;
+- pacotes extras (collectd, vnstat2, nlbwmon, tcpdump, nmap etc.);
+- expand_root: no 1º boot, a rootfs passa a ocupar o disco/SD inteiro.
 
-## Script único para novas versões
+Targets já gerados e validados por este script (release 25.12.5):
 
-Use o script abaixo para gerar novamente a imagem completa quando sair uma nova release:
+| Equipamento | Target/Subtarget | Profile | Arquitetura |
+|---|---|---|---|
+| PC / mini-PC / VM x86 64 bits | `x86/64` | `generic` | `x86_64` |
+| Raspberry Pi 4B / 400 / CM4 | `bcm27xx/bcm2711` | `rpi-4` | `aarch64_cortex-a72` (ARMv8) |
 
-- Script: [`build_openwrt_raspberry_pi4b.sh`](build_openwrt_raspberry_pi4b.sh)
-
-Baixar e dar permissão de execução:
+## Instalação do script
 
 ```sh
 mkdir -p ~/openwrt && cd ~/openwrt
-curl -fLO https://raw.githubusercontent.com/ajcorrea/openwrt/main/build_openwrt_raspberry_pi4b.sh
-chmod +x build_openwrt_raspberry_pi4b.sh
+curl -fLO https://raw.githubusercontent.com/ajcorrea/openwrt/main/build_openwrt.sh
+chmod +x build_openwrt.sh
 ```
 
-Tudo (downloads, `work/`, `tmp/`, `images/`) é criado dentro da pasta onde o script está.
+Tudo (downloads, `work/`, `tmp/`, `images/`) é criado dentro da pasta onde o script está. Você pode renomear o arquivo (ex.: `build.sh`): a ajuda e as mensagens usam o nome real.
 
-Ajuda rápida:
+## Uso
 
-```sh
-./build_openwrt_raspberry_pi4b.sh --help
+```text
+./build_openwrt.sh <VERSÃO> <TARGET/SUBTARGET> [PROFILE]
 ```
 
-Verificar só as dependências do sistema (não compila nada):
+O **1º argumento é sempre a versão**. Se você começar direto pelo target (ex.: `./build_openwrt.sh x86/64 generic`), o script avisa e usa a versão padrão (25.12.5).
+
+### Exemplo 1 — x86 64 bits (PC, mini-PC, Proxmox, VMware, VirtualBox)
 
 ```sh
-./build_openwrt_raspberry_pi4b.sh --check-deps
+./build_openwrt.sh 25.12.5 x86/64 generic
+```
+
+Imagens principais em `images/`:
+
+- `openwrt-25.12.5-fullcone-argon-extra-expandroot-x86-64-generic-squashfs-combined-efi.img.gz` (boot UEFI);
+- `openwrt-25.12.5-fullcone-argon-extra-expandroot-x86-64-generic-squashfs-combined.img.gz` (boot BIOS/legacy).
+
+### Exemplo 2 — Raspberry Pi 4 Model B / 400 / CM4 (64 bits)
+
+```sh
+./build_openwrt.sh 25.12.5 bcm27xx/bcm2711 rpi-4
+```
+
+Imagens principais em `images/`:
+
+- `openwrt-25.12.5-fullcone-argon-extra-expandroot-bcm27xx-bcm2711-rpi-4-squashfs-factory.img.gz` (gravar no cartão SD);
+- `openwrt-25.12.5-fullcone-argon-extra-expandroot-bcm27xx-bcm2711-rpi-4-squashfs-sysupgrade.img.gz` (atualizar um Pi que já roda OpenWrt).
+
+### Outras formas de chamar
+
+```sh
+# TARGET e SUBTARGET separados (equivale aos exemplos acima)
+./build_openwrt.sh 25.12.5 x86 64 generic
+./build_openwrt.sh 25.12.5 bcm27xx bcm2711 rpi-4
+
+# Nova release: só troque a versão
+./build_openwrt.sh 25.12.6 x86/64 generic
+./build_openwrt.sh 25.12.6 bcm27xx/bcm2711 rpi-4
+```
+
+- Se você não informar o profile, o script usa o padrão conhecido (`x86/64 -> generic`, `bcm27xx/bcm2711 -> rpi-4`).
+- Sem nenhum argumento, ele gera `25.12.5 bcm27xx/bcm2711 rpi-4`. Esse padrão foi mantido por compatibilidade; prefira informar versão e target.
+- Para descobrir o target e o profile de outro equipamento, use `--list-profiles` (seção abaixo).
+
+### Ajuda, dependências e validação
+
+```sh
+./build_openwrt.sh --help          # ajuda completa
+./build_openwrt.sh --check-deps    # só verifica as dependências (não compila)
+
+# Valida imagens já geradas, sem refazer o build
+./build_openwrt.sh --validate 25.12.5 x86/64 generic
+./build_openwrt.sh --validate 25.12.5 bcm27xx/bcm2711 rpi-4
 ```
 
 O script sempre verifica as dependências antes de começar. Se faltar alguma, ele lista cada item faltante (comando ou biblioteca de desenvolvimento e o pacote correspondente), mostra o comando de instalação pronto para a sua distro (apt, dnf, pacman ou zypper) e para — **nada é instalado automaticamente**. Instale com o comando mostrado e rode o script de novo.
 
-Validar imagens já geradas, sem refazer o build:
+A validação lê o rootfs **de dentro da imagem squashfs gerada** (`squashfs-combined.img.gz` no x86, `squashfs-sysupgrade.img.gz` no Raspberry Pi). Ela confere o manifest, os pacotes obrigatórios e os scripts `70-rootpt-resize`, `80-rootfs-resize` e `99-argon-default`. Se falhar, grava `tmp/validate/diagnostico.txt` (versão do unsquashfs, offset da partição, `uci-defaults` encontrados, conteúdo de `files/`).
+
+## Imagens geradas para x86/64
+
+`x86/64` é o único target x86 de 64 bits. `x86/generic`, `x86/legacy` e `x86/geode` são de 32 bits.
+
+| Arquivo (`openwrt-<versão>-fullcone-argon-extra-expandroot-x86-64-generic-…`) | Uso |
+|---|---|
+| `squashfs-combined-efi.img.gz` | **Recomendado**: PC/VM com boot UEFI (permite reset de fábrica) |
+| `squashfs-combined.img.gz` | PC/VM com boot BIOS/legacy |
+| `ext4-combined-efi.img.gz` / `ext4-combined.img.gz` | Mesmo uso, rootfs ext4 (gravável, sem reset de fábrica) |
+| `*-rootfs.img.gz`, `kernel.bin`, `rootfs.tar.gz` | Uso avançado (ex.: container/LXC no Proxmox) |
+
+As imagens `combined` servem tanto para gravar no disco (`dd`, ou converter para VM com `qemu-img convert`) quanto para `sysupgrade`. A validação final do script lê o rootfs de dentro da `squashfs-combined.img.gz`.
+
+Gravar num disco/SSD (troque `/dev/sdX` pelo disco correto — **apaga tudo**):
 
 ```sh
-./build_openwrt_raspberry_pi4b.sh --validate 25.12.5
+gunzip -c openwrt-25.12.5-fullcone-argon-extra-expandroot-x86-64-generic-squashfs-combined-efi.img.gz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
 ```
 
-A validação lê o rootfs **de dentro da imagem `squashfs-sysupgrade.img.gz` gerada** e confere os scripts `70-rootpt-resize`, `80-rootfs-resize` e `99-argon-default`. Se falhar, grava `tmp/validate/diagnostico.txt` (versão do unsquashfs, offset da partição, `uci-defaults` encontrados, conteúdo de `files/`).
-
-Exemplo (só mudando a versão):
+Converter para disco de VM (Proxmox/QEMU):
 
 ```sh
-./build_openwrt_raspberry_pi4b.sh 25.12.6
+gunzip -k openwrt-25.12.5-fullcone-argon-extra-expandroot-x86-64-generic-squashfs-combined-efi.img.gz
+qemu-img convert -f raw -O qcow2 openwrt-25.12.5-fullcone-argon-extra-expandroot-x86-64-generic-squashfs-combined-efi.img openwrt-x86-64.qcow2
 ```
 
-Exemplo com parâmetros explícitos:
+Downloads interrompidos não quebram mais o build: o SDK e o ImageBuilder são baixados para `.part` e conferidos com o `sha256sums` oficial. Um arquivo incompleto que já esteja em `work/` é detectado e baixado de novo.
+
+## Listar os profiles de uma plataforma (`--list-profiles`)
+
+Antes do build, descubra o target e o nome exato do profile do seu equipamento. O script lê os JSON oficiais da release (`.overview.json` e `profiles.json`). Ele não baixa SDK nem ImageBuilder e não exige as dependências de compilação (só `curl` e `python3`).
+
+| Comando | O que mostra |
+|---|---|
+| `--list-profiles` | Todos os targets da release padrão (25.12.5), com nº de profiles |
+| `--list-profiles 25.12.6` | Todos os targets da release informada |
+| `--list-profiles 25.12.5 x86/64` | Profiles de um target específico |
+| `--list-profiles 25.12.5 all` | Todos os profiles de todos os targets (~1900) |
 
 ```sh
-./build_openwrt_raspberry_pi4b.sh 25.12.6 bcm27xx bcm2711 rpi-4
+# 1) ver todos os targets
+./build_openwrt.sh --list-profiles 25.12.5
+
+# 2) procurar seu equipamento em todos os profiles
+./build_openwrt.sh --list-profiles 25.12.5 all | grep -i "raspberry pi 4"
+
+# 3) ver os profiles de um target
+./build_openwrt.sh --list-profiles 25.12.5 x86/64
+./build_openwrt.sh --list-profiles 25.12.5 bcm27xx bcm2711
 ```
+
+Saída de exemplo (todos os targets, trecho):
+
+```text
+[INFO] Targets disponíveis no OpenWrt 25.12.5
+TARGET/SUBTARGET     | PROFILES
+---------------------+---------
+apm821xx/nand        | 5
+...
+bcm27xx/bcm2711      | 1
+...
+mediatek/filogic     | 170
+...
+x86/64               | 1
+
+Total: 90 target(s) | 1932 profile(s)
+```
+
+Saída de exemplo (profiles de um target):
+
+```text
+[INFO] Profiles para OpenWrt 25.12.5 | target=x86 | subtarget=64
+PROFILE | DISPOSITIVO(S)
+--------+-------------------------------
+generic | Generic x86/64
+
+Total: 1 profile(s)
+Exemplo: ./build_openwrt.sh 25.12.5 x86/64 generic
+```
+
+Se a plataforma não existir na release, o script mostra a URL consultada e o link da lista de targets: `https://downloads.openwrt.org/releases/<versão>/targets/`.
+
+> Atenção: o expand_root e a validação final foram feitos para imagens com partição de rootfs (x86, Raspberry Pi). Em roteadores com flash NAND/NOR (ex.: `mediatek/filogic`), o build pode precisar de ajustes. Lá não existem as imagens `squashfs-combined`/`squashfs-sysupgrade` que a validação procura.
 
 O script automaticamente:
 1. baixa SDK + ImageBuilder da versão informada;
 2. recompila FullCone e Argon;
 3. embute pacotes extras;
 4. adiciona scripts de `expand_root` no primeiro boot;
-5. gera imagens `factory/sysupgrade` em `images/`;
+5. gera as imagens em `images/` (`combined` no x86, `factory/sysupgrade` no Raspberry Pi);
 6. executa validação final automática (manifest + pacotes obrigatórios + presença dos scripts `uci-defaults` no rootfs).
 
 ## Sobre o pacote solicitado (`openwrt-sonic-fullcone`)
@@ -81,13 +194,13 @@ O repositório informado (`github.com/akorshun/fullcone-openwrt`) não expõe um
 - `libnftnl11` (patch)
 - `nftables-json` (patch)
 
-Esses pacotes foram compilados via **SDK oficial 25.12.5 para bcm27xx/bcm2711** e injetados no ImageBuilder.
+Esses pacotes são compilados no **SDK oficial do target escolhido** (ex.: `x86/64`, `bcm27xx/bcm2711`) e injetados no ImageBuilder. O módulo do kernel só funciona com o kernel exato da release/target em que foi compilado.
 
 ## Evidência de inclusão no firmware
 
-Manifesto da imagem gerada:
+Manifesto da imagem do Raspberry Pi 4 (25.12.5):
 
-`images/openwrt-25.12.5-fullcone-bcm27xx-bcm2711-rpi-4.manifest`
+`images/openwrt-25.12.5-fullcone-argon-extra-expandroot-bcm27xx-bcm2711-rpi-4.manifest`
 
 Entradas relevantes presentes:
 
@@ -97,13 +210,15 @@ Entradas relevantes presentes:
 - `luci-app-fullcone - 26.278.52999~fa29808`
 - `nftables-json - 1.1.6-r202`
 
+No manifest do x86/64 (`images/openwrt-25.12.5-fullcone-argon-extra-expandroot-x86-64-generic.manifest`), os mesmos pacotes aparecem com revisões `r101/r102` (`firewall4 - 2025.03.17~b6e51575-r102`, `kmod-nft-fullcone - 6.12.94.2023.05.17~07d93b62-r3`). As versões oficiais da release são `r2`; uma revisão maior indica que o pacote com patch foi o usado.
+
 ## Arquivos de firmware gerados
 
 Diretório de saída:
 
 `images/`
 
-### Imagens atuais (FullCone + Argon + pacotes extras + expand_root)
+### Raspberry Pi 4 (FullCone + Argon + pacotes extras + expand_root)
 
 1. `openwrt-25.12.5-fullcone-argon-extra-expandroot-bcm27xx-bcm2711-rpi-4-ext4-sysupgrade.img.gz`
 2. `openwrt-25.12.5-fullcone-argon-extra-expandroot-bcm27xx-bcm2711-rpi-4-squashfs-sysupgrade.img.gz`
@@ -111,6 +226,8 @@ Diretório de saída:
 4. `openwrt-25.12.5-fullcone-argon-extra-expandroot-bcm27xx-bcm2711-rpi-4-squashfs-factory.img.gz`
 
 > As imagens `-argon-`, `-webui-` e sem sufixo são de builds anteriores.
+>
+> Para as imagens x86/64, veja a seção "Imagens geradas para x86/64" acima.
 
 ### Tema Argon
 
@@ -143,7 +260,7 @@ Também foram gerados:
 > **Atenção:** confirme o dispositivo correto (ex.: `/dev/sdX` ou `/dev/mmcblk0`) para não sobrescrever disco errado.
 
 ```bash
-gzip -dc openwrt-25.12.5-fullcone-bcm27xx-bcm2711-rpi-4-ext4-factory.img.gz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
+gzip -dc openwrt-25.12.5-fullcone-argon-extra-expandroot-bcm27xx-bcm2711-rpi-4-squashfs-factory.img.gz | sudo dd of=/dev/sdX bs=4M status=progress conv=fsync
 sync
 ```
 
@@ -192,13 +309,19 @@ sysupgrade -v /tmp/openwrt-25.12.5-fullcone-argon-extra-expandroot-bcm27xx-bcm27
 ```
 Use `sysupgrade -n` para apagar as configurações. Use a variante (ext4/squashfs) igual à instalada hoje.
 
+No x86/64 é igual, com a imagem `combined` (use `-efi` se o equipamento instalado hoje dá boot em UEFI):
+
+```sh
+scp -O openwrt-25.12.5-fullcone-argon-extra-expandroot-x86-64-generic-squashfs-combined-efi.img.gz root@192.168.1.1:/tmp/
+sysupgrade -T /tmp/openwrt-25.12.5-fullcone-argon-extra-expandroot-x86-64-generic-squashfs-combined-efi.img.gz
+sysupgrade -v /tmp/openwrt-25.12.5-fullcone-argon-extra-expandroot-x86-64-generic-squashfs-combined-efi.img.gz
+```
+
 ## Pacotes adicionais incluídos nesta imagem
 
 Foram embutidos os pacotes adicionais solicitados (monitoramento/rede/ferramentas), incluindo: `collectd` (+ módulos CPU/Memória/Network/Interface/IWInfo/RRD), `vnstat2` + `luci-app-vnstat2`, `nlbwmon` + `luci-app-nlbwmon`, `luci-app-statistics`, `luci-app-upnp`, `luci-app-wol`, `miniupnpd-nftables`, `curl`, `tcpdump`, `htop`, `iftop`, `iperf3`, `nmap-full`, `mtr-nojson`, `parted`, `losetup`, `resize2fs`, entre outros.
 
-> Único item da sua lista que **não existe** nesse feed/build: `luci-app-argon-config` (o Argon v3 já incorpora esse painel no próprio `luci-theme-argon`).
-
-## Expansão automática para usar todo o cartão SD (expand_root)
+## Expansão automática para usar todo o disco ou cartão SD (expand_root)
 
 Para aplicar o procedimento do guia `expand_root` no primeiro boot, a imagem já inclui:
 
@@ -212,7 +335,7 @@ Esses scripts usam `parted + losetup + resize2fs` e fazem reboot automático dur
 1. Sobe normalmente.
 2. Executa `70-rootpt-resize` e reinicia.
 3. Executa `80-rootfs-resize` e reinicia novamente.
-4. Na terceira subida, o rootfs já está expandido para ocupar todo o SD.
+4. Na terceira subida, o rootfs já está expandido para ocupar todo o disco (x86) ou cartão SD (Raspberry Pi).
 
 ### Como validar após instalar
 
@@ -227,11 +350,10 @@ Se os arquivos `/etc/rootpt-resize` e `/etc/rootfs-resize` existem, a expansão 
 ## Fontes e componentes oficiais utilizados
 
 - Releases OpenWrt: `https://downloads.openwrt.org/releases/`
-- ImageBuilder oficial 25.12.5 (bcm27xx/bcm2711)
-- SDK oficial 25.12.5 (bcm27xx/bcm2711)
+- ImageBuilder e SDK oficiais de cada release/target, baixados de `https://downloads.openwrt.org/releases/<versão>/targets/<target>/<subtarget>/` e conferidos com o `sha256sums` oficial
 - Repositório FullCone: `https://github.com/akorshun/fullcone-openwrt`
 
 ## Observações
 
-- O build foi realizado com os pacotes do repositório `akorshun/fullcone-openwrt` adaptados ao SDK oficial do target bcm2711.
-- As revisões `r201/r202` dos pacotes patchados garantem prioridade sobre os pacotes padrão da release na composição da imagem.
+- O build usa os pacotes do repositório `akorshun/fullcone-openwrt`, compilados no SDK oficial de cada target.
+- As revisões maiores dos pacotes com patch (`r1xx/r2xx`, contra `r2` na release oficial) garantem prioridade sobre os pacotes padrão na composição da imagem.
