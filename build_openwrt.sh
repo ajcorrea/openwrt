@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 # =============================================================================
-#  build_openwrt_raspberry_pi4b.sh
-#  OpenWrt para Raspberry Pi 4 com FullCone NAT, tema Argon e expand_root
+#  build_openwrt.sh
+#  Gera firmware OpenWrt para qualquer target com partição de rootfs
+#  (ex.: x86/64, Raspberry Pi) com FullCone NAT, LuCI, tema Argon (pt-BR),
+#  pacotes extras e expand_root no 1º boot.
 #
 #  Autor:  Alexandre Jeronimo Correa
 #  GitHub: github.com/ajcorrea/openwrt
@@ -12,53 +14,72 @@ set -euo pipefail
 # sfdisk/unsquashfs ficam em /sbin ou /usr/sbin em algumas distros (ex.: Debian)
 export PATH="${PATH}:/usr/sbin:/sbin"
 
+SCRIPT_NAME="$(basename "$0")"
+
 print_help() {
-  cat <<'EOF'
+  local s="./${SCRIPT_NAME}"
+  cat <<EOF
 Uso:
-  ./build_openwrt_raspberry_pi4b.sh [RELEASE] [TARGET] [SUBTARGET] [PROFILE]
+  ${s} <VERSÃO> <TARGET/SUBTARGET> [PROFILE]
+  ${s} <VERSÃO> <TARGET> <SUBTARGET> [PROFILE]
 
 Exemplos:
-  ./build_openwrt_raspberry_pi4b.sh
-  ./build_openwrt_raspberry_pi4b.sh 25.12.6
-  ./build_openwrt_raspberry_pi4b.sh 25.12.6 bcm27xx bcm2711 rpi-4
-  ./build_openwrt_raspberry_pi4b.sh 25.12.6 x86 64 generic
-  ./build_openwrt_raspberry_pi4b.sh 25.12.6 x86/64 generic
+  # PC / mini-PC / VM x86 64 bits (Proxmox, VMware, VirtualBox)
+  ${s} 25.12.5 x86/64 generic
 
-Padrões:
-  RELEASE   = 25.12.5
-  TARGET    = bcm27xx
-  SUBTARGET = bcm2711
-  PROFILE   = rpi-4
+  # Raspberry Pi 4 Model B / 400 / CM4 (64 bits)
+  ${s} 25.12.5 bcm27xx/bcm2711 rpi-4
 
-Notas de parâmetros:
-  - Você pode informar TARGET/SUBTARGET separados (ex.: x86 64)
-    ou combinados com barra (ex.: x86/64).
-  - Se PROFILE não for informado, o script tenta um default por plataforma
-    (bcm27xx/bcm2711 -> rpi-4, x86/64 -> generic).
+  # Mesma coisa com TARGET e SUBTARGET separados
+  ${s} 25.12.5 x86 64 generic
+  ${s} 25.12.5 bcm27xx bcm2711 rpi-4
+
+  # Não sabe o target/profile do seu equipamento? Liste primeiro:
+  ${s} --list-profiles 25.12.5 all | grep -i "raspberry pi 4"
+
+Parâmetros:
+  VERSÃO      Release do OpenWrt (ex.: 25.12.5, 25.12.6). Sempre o 1º argumento.
+              Se o 1º argumento for um target (ex.: x86/64), usa 25.12.5 e avisa.
+  TARGET      Plataforma (ex.: x86, bcm27xx). Aceita TARGET/SUBTARGET com barra.
+  SUBTARGET   Sub-plataforma (ex.: 64, bcm2711).
+  PROFILE     Dispositivo (ex.: generic, rpi-4). Se omitido, usa o padrão
+              conhecido (x86/64 -> generic | bcm27xx/bcm2711 -> rpi-4).
+
+Sem argumentos: usa 25.12.5 bcm27xx/bcm2711 rpi-4 (mantido por compatibilidade).
+Prefira sempre informar versão e target.
+
+Imagens geradas em images/ (principais):
+  x86/64            *-squashfs-combined-efi.img.gz (UEFI) | *-squashfs-combined.img.gz (BIOS)
+  bcm27xx/bcm2711   *-squashfs-factory.img.gz (gravar no SD) | *-squashfs-sysupgrade.img.gz
 
 O que o script faz:
-  1) Baixa ImageBuilder + SDK da release
-  2) Compila FullCone + Argon (pt-BR)
-  3) Gera imagem com pacotes extras
-  4) Injeta scripts de expand_root no 1º boot
+  1) Baixa ImageBuilder + SDK da release/target (com conferência SHA256)
+  2) Compila FullCone + Argon (pt-BR) no SDK do target
+  3) Gera a imagem com LuCI e pacotes extras
+  4) Injeta scripts de expand_root (usa o disco/SD inteiro no 1º boot)
   5) Executa validação final automática
 
 Opções:
   -h, --help     Mostra esta ajuda
   --check-deps   Só verifica as dependências do sistema e sai
-  --list-profiles [RELEASE] [TARGET] [SUBTARGET]
+  --list-profiles [VERSÃO] [TARGET] [SUBTARGET]
                  Sem TARGET: lista todos os targets da release (com nº de profiles).
                  Com TARGET: lista os profiles daquela plataforma.
                  Com "all": lista todos os profiles de todos os targets.
                  (lê os JSON oficiais; não baixa SDK/ImageBuilder). Ex.:
-                   --list-profiles
-                   --list-profiles 25.12.5
-                   --list-profiles 25.12.5 x86/64
-                   --list-profiles 25.12.5 bcm27xx bcm2711
-                   --list-profiles 25.12.5 all | grep -i tp-link
-  --validate [RELEASE] [TARGET] [SUBTARGET] [PROFILE]
-                 Só valida as imagens já geradas em images/ (sem rebuild).
+                   ${s} --list-profiles 25.12.5
+                   ${s} --list-profiles 25.12.5 x86/64
+                   ${s} --list-profiles 25.12.5 bcm27xx/bcm2711
+                   ${s} --list-profiles 25.12.5 all | grep -i tp-link
+  --validate [VERSÃO] [TARGET] [SUBTARGET] [PROFILE]
+                 Só valida as imagens já geradas em images/ (sem rebuild). Ex.:
+                   ${s} --validate 25.12.5 x86/64 generic
+                   ${s} --validate 25.12.5 bcm27xx/bcm2711 rpi-4
                  Em caso de falha, grava tmp/validate/diagnostico.txt
+
+Limitação: expand_root e validação exigem imagem com partição de rootfs
+(x86, Raspberry Pi e similares). Roteadores com flash NAND/NOR podem
+precisar de ajustes.
 
 Antes de compilar, o script verifica as dependências. Se faltar alguma,
 ele lista o que falta, mostra o comando de instalação para a sua distro
@@ -213,11 +234,15 @@ RELEASE_REGEX='^[0-9]{2}\.[0-9]{2}\.[0-9]+(-rc[0-9]+)?$'
 if [[ -n "${1:-}" && ! "${1}" =~ $RELEASE_REGEX ]]; then
   if [[ "${1}" == */* ]]; then
     echo "[AVISO] Versão não informada | 1º argumento '${1}' parece um target | usando versão padrão: ${DEFAULT_RELEASE}"
-    echo "[AVISO] Formato correto: $0 <VERSÃO> <TARGET/SUBTARGET> <PROFILE> | ex.: $0 ${DEFAULT_RELEASE} x86/64 generic"
+    echo "[AVISO] Formato correto: $0 <VERSÃO> <TARGET/SUBTARGET> <PROFILE>"
+    echo "[AVISO]   x86 64 bits:    $0 ${DEFAULT_RELEASE} x86/64 generic"
+    echo "[AVISO]   Raspberry Pi 4: $0 ${DEFAULT_RELEASE} bcm27xx/bcm2711 rpi-4"
     set -- "$DEFAULT_RELEASE" "$@"
   else
     echo "[ERRO] Versão inválida: '${1}' | formato esperado: AA.MM.N (ex.: 25.12.5, 25.12.0-rc1)"
-    echo "[INFO] Uso: $0 <VERSÃO> <TARGET/SUBTARGET> <PROFILE> | ex.: $0 ${DEFAULT_RELEASE} x86/64 generic"
+    echo "[INFO] Uso: $0 <VERSÃO> <TARGET/SUBTARGET> <PROFILE>"
+    echo "[INFO]   x86 64 bits:    $0 ${DEFAULT_RELEASE} x86/64 generic"
+    echo "[INFO]   Raspberry Pi 4: $0 ${DEFAULT_RELEASE} bcm27xx/bcm2711 rpi-4"
     echo "[INFO] Versões disponíveis: https://downloads.openwrt.org/releases/"
     exit 1
   fi
@@ -255,7 +280,14 @@ if [[ "$RAW_TARGET" == */* ]]; then
   fi
 else
   TARGET="$RAW_TARGET"
-  SUBTARGET="${RAW_SUBTARGET:-bcm2711}"
+  SUBTARGET="$RAW_SUBTARGET"
+  # Subtarget implícito só no padrão de compatibilidade (bcm27xx -> bcm2711)
+  [[ -z "$SUBTARGET" && "$TARGET" == "bcm27xx" ]] && SUBTARGET="bcm2711"
+  if [[ -z "$SUBTARGET" ]]; then
+    echo "[ERRO] SUBTARGET não informado para o target '${TARGET}' | use TARGET/SUBTARGET (ex.: x86/64)"
+    echo "[INFO] Liste os targets da release: $0 --list-profiles ${RELEASE}"
+    exit 1
+  fi
   PROFILE="$RAW_PROFILE"
 fi
 
@@ -264,7 +296,7 @@ if [[ -z "${PROFILE:-}" ]]; then
 fi
 
 if [[ "$PROFILE" == */* ]]; then
-  echo "[ERRO] PROFILE inválido: ${PROFILE} | Use um nome simples (ex.: generic, rpi-4)."
+  echo "[ERRO] PROFILE inválido: ${PROFILE} | use um nome simples (ex.: generic, rpi-4) | liste com: $0 --list-profiles ${RELEASE} ${TARGET}/${SUBTARGET}"
   exit 1
 fi
 
@@ -292,8 +324,9 @@ fetch_target_index() {
   if ! curl -fsSL "$TARGET_URL/" -o "$TARGET_INDEX_FILE" 2>/dev/null; then
     echo "[ERRO] Target/Subtarget não encontrado para esta release: release=${RELEASE} | target=${TARGET} | subtarget=${SUBTARGET}"
     echo "[INFO] Exemplos válidos:"
-    echo "  - $0 ${RELEASE} bcm27xx/bcm2711 rpi-4"
-    echo "  - $0 ${RELEASE} x86/64 generic"
+    echo "  - x86 64 bits:    $0 ${RELEASE} x86/64 generic"
+    echo "  - Raspberry Pi 4: $0 ${RELEASE} bcm27xx/bcm2711 rpi-4"
+    echo "[INFO] Liste os targets da release: $0 --list-profiles ${RELEASE}"
     echo "[INFO] URL consultada: ${TARGET_URL}/"
     exit 1
   fi
