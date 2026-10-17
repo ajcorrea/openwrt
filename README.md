@@ -4,7 +4,7 @@
 **GitHub:** [github.com/ajcorrea/openwrt](https://github.com/ajcorrea/openwrt)  
 **E-mail:** [ajcorrea@gmail.com](mailto:ajcorrea@gmail.com)
 
-## Resumo do que foi gerado
+## Resumo 
 
 Este build foi feito com **ImageBuilder oficial do OpenWrt** para o target **bcm27xx/bcm2711** e perfil **rpi-4** (Raspberry Pi 4B/400/CM4 64 bits).
 
